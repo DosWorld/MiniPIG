@@ -1,0 +1,168 @@
+$unit_start {$F-,S-,R-,O-}
+$uses       Lexer
+$token_type TTokenKind
+$token_next NextToken
+$token_kind CurrToken
+$token_value CurrTokenVal
+$token_line  CurrLine
+$token_eof   tokEOF
+
+(* --- Keywords --- *)
+$token tokInt       (* int *)
+$token tokChar      (* char *)
+$token tokIf        (* if *)
+$token tokElse      (* else *)
+$token tokWhile     (* while *)
+$token tokReturn    (* return *)
+$token tokBreak     (* break *)
+$token tokContinue  (* continue *)
+$token tokExtern    (* extern *)
+
+(* --- Literals & Identifiers --- *)
+$token_with_value tokIdent     (* identifier *)
+$token_with_value tokNumber    (* 123 *)
+$token_with_value tokString    (* "abc" *)
+
+(* --- Operators --- *)
+$token tokAssign    (* = *)
+$token tokEqual     (* == *)
+$token tokNotEqual  (* != *)
+$token tokLess      (* < *)
+$token tokLessEq    (* <= *)
+$token tokGreater   (* > *)
+$token tokGreaterEq (* >= *)
+$token tokPlus      (* + *)
+$token tokMinus     (* - *)
+$token tokStar      (* * (mult or deref) *)
+$token tokDiv       (* / *)
+$token tokAmp       (* & (address of) *)
+$token tokNot       (* ! *)
+
+(* --- Punctuation --- *)
+$token tokLPar      (* ( *)
+$token tokRPar      (* ) *)
+$token tokLBrace    (* { *)
+$token tokRBrace    (* } *)
+$token tokSemi      (* ; *)
+$token tokComma     (* , *)
+$token tokEOF       (* End of File *)
+
+(* ========================================================================== *)
+(* Grammar Rules                                                              *)
+(* ========================================================================== *)
+
+(* Entry Point: A program is a list of external declarations *)
+Program ::= 
+    { ExternalDecl } 
+    tokEOF 
+    ;
+
+(* External Declaration: Variables, Functions, or Externs *)
+ExternalDecl ::=
+      tokExtern Type SpecDeclarator tokSemi <? WriteLn('Extern decl parsed'); ?>
+    | Type SpecDeclarator ( 
+          tokSemi <? WriteLn('Global var parsed'); ?> 
+        | FunctionBody <? WriteLn('Function body parsed'); ?>
+      )
+    ;
+
+(* Base Types *)
+Type ::= 
+      tokInt 
+    | tokChar 
+    ;
+
+(* Declarator with optional pointers: *x *)
+SpecDeclarator ::= 
+    { tokStar } tokIdent 
+    [ tokLPar ParamList tokRPar ] (* Check if it is a function *)
+    ;
+
+(* Function Parameters: (int a, char *b) *)
+ParamList ::=
+    [ Type { tokStar } tokIdent { tokComma Type { tokStar } tokIdent } ]
+    ;
+
+(* Function Body *)
+FunctionBody ::=
+    Block
+    ;
+
+(* Block: { declarations statements } *)
+Block ::=
+    tokLBrace 
+    { BlockItem } 
+    tokRBrace
+    ;
+
+(* Helper to distinguish Variable Declarations from Statements *)
+(* We assume declarations start with 'int' or 'char' *)
+BlockItem ::=
+      Type SpecDeclarator tokSemi 
+    | Statement
+    ;
+
+(* Statements *)
+Statement ::=
+      tokSemi (* Empty statement *)
+    | tokIf tokLPar Expr tokRPar Statement [ tokElse Statement ]
+    | tokWhile tokLPar Expr tokRPar Statement
+    | tokReturn [ Expr ] tokSemi
+    | tokBreak tokSemi
+    | tokContinue tokSemi
+    | Block
+    | Expr tokSemi
+    ;
+
+(* ========================================================================== *)
+(* Expressions (Precedence Levels)                                            *)
+(* ========================================================================== *)
+
+(* 1. Assignment (Right associative) *)
+Expr ::=
+    EqualityExpr [ tokAssign Expr ]
+    ;
+
+(* 2. Equality (==, !=) *)
+EqualityExpr ::=
+    RelExpr { ( tokEqual | tokNotEqual ) RelExpr }
+    ;
+
+(* 3. Relational (<, <=, >, >=) *)
+RelExpr ::=
+    AddExpr { ( tokLess | tokLessEq | tokGreater | tokGreaterEq ) AddExpr }
+    ;
+
+(* 4. Additive (+, -) *)
+AddExpr ::=
+    Term { ( tokPlus | tokMinus ) Term }
+    ;
+
+(* 5. Multiplicative (*, /) *)
+Term ::=
+    Factor { ( tokStar | tokDiv ) Factor }
+    ;
+
+(* 6. Unary / Prefix (*x, &x, !x, -x) *)
+(* Note: tokStar here implies Dereference *)
+Factor ::=
+      tokStar Factor 
+    | tokAmp  Factor 
+    | tokNot  Factor 
+    | tokMinus Factor
+    | Primary
+    ;
+
+(* 7. Primary (Identifier, Number, String, Calls, Parentheses) *)
+Primary ::=
+      tokIdent [ tokLPar ArgList tokRPar ] (* Variable or Function Call *)
+    | tokNumber
+    | tokString
+    | tokLPar Expr tokRPar
+    ;
+
+(* Function Call Arguments *)
+ArgList ::=
+    [ Expr { tokComma Expr } ]
+    ;
+

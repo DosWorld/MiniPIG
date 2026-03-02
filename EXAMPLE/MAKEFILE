@@ -1,0 +1,11 @@
+all: minic.pas gminic.pas lexer.pas
+        tpc /m minic.pas
+
+gminic.pas: gminic.txt
+        minipig gminic.txt
+clean:
+        del *.bak
+        del *.tpu
+        del minic.exe
+        del minic.tpu
+
