@@ -31,6 +31,7 @@ Type
   TTokenDecl = Record
     Name: TTokenName;
     ID: Integer;
+    HasVal: Boolean;
     Next: PTokenDecl;
   End;
 
@@ -120,7 +121,7 @@ forward;
 Procedure Error(Const Msg: String);
 Begin
   Write('Error');
-  If CurrentProcessingRule <> '' Then Write(' [Rule: ', CurrentProcessingRule, ']');
+  If CurrentProcessingRule <> '' Then Write(' in rule ', CurrentProcessingRule);
   Writeln(' (Line ', LineNum, '): ', Msg);
   Halt(1);
 End;
@@ -128,7 +129,7 @@ End;
 Procedure Warning(Const Msg: String);
 Begin
   Write('Warning');
-  If CurrentProcessingRule <> '' Then Write(' [Rule: ', CurrentProcessingRule, ']');
+  If CurrentProcessingRule <> '' Then Write(' in rule ', CurrentProcessingRule);
   Writeln(': ', Msg);
 End;
 
@@ -284,7 +285,7 @@ End;
 Function ParseAlts(IsGroup: Boolean): PAlt;
 forward;
 
-Procedure RegisterToken(Const Name: TTokenName);
+Procedure RegisterToken(Const Name: TTokenName; AHasVal: Boolean);
 
 Var P, Last: PTokenDecl;
 Begin
@@ -298,6 +299,7 @@ Begin
   New(P);
   P^.Name := Name;
   P^.ID := TokenCounter;
+  P^.HasVal := AHasVal;
   P^.Next := Nil;
   Inc(TokenCounter);
   If FirstToken = Nil Then FirstToken := P
@@ -588,7 +590,8 @@ Begin
       If Cursor > BufferLen Then Break;
       If MatchKeyword('$unit_start') Then GlobalUnitStart := readToEol(Start)
       Else If MatchKeyword('$uses') Then GlobalUses := readToEol(Start)
-      Else If MatchKeyword('$token') Then RegisterToken(readToEol(Start))
+      Else If MatchKeyword('$token') Then RegisterToken(readToEol(Start), False)
+      Else If MatchKeyword('$token_with_value') Then RegisterToken(readToEol(Start), True)
       Else If MatchKeyword('$token_type') Then CfgTokenType := readToEol(Start)
       Else If MatchKeyword('$token_next') Then CfgTokenNext := readToEol(Start)
       Else If MatchKeyword('$token_kind') Then CfgTokenKind := readToEol(Start)
@@ -716,12 +719,12 @@ Begin
                   ekGroup:
                            Begin
                              Alt^.FirstSet := Alt^.FirstSet + El^.Group^.FirstSet;
-                             If Not El^.Group^.IsNullable Then
-                               Begin
-                                 Alt^.IsNullable := False;
-                                 Break;
-                               End;
-                           End;
+                               If Not El^.Group^.IsNullable Then
+                                 Begin
+                                   Alt^.IsNullable := False;
+                                   Break;
+                                 End;
+                             End;
                   ekPredicate, ekEmpty: ;
                 End;
                 El := El^.Next;
@@ -777,12 +780,12 @@ Begin
                   ekGroup:
                            Begin
                              Alt^.FirstSet := Alt^.FirstSet + El^.Group^.FirstSet;
-                             If Not El^.Group^.IsNullable Then
-                               Begin
-                                 Alt^.IsNullable := False;
-                                 Break;
-                               End;
-                           End;
+                               If Not El^.Group^.IsNullable Then
+                                 Begin
+                                   Alt^.IsNullable := False;
+                                   Break;
+                                 End;
+                             End;
                   ekPredicate, ekEmpty: ;
                 End;
                 El := El^.Next;
@@ -1119,7 +1122,12 @@ Begin
             Begin
               If IterTok^.ID In SelectSet Then
                 Begin
-                  If NeedComma Then Write(OutFile, ', ');
+                  If NeedComma Then
+                  begin
+                    Writeln(OutFile, ',');
+                    WriteIndent;
+                    Write(OutFile, '  ');
+                  end;
                   Write(OutFile, IterTok^.Name);
                   NeedComma := True;
                 End;
@@ -1162,7 +1170,12 @@ Begin
     Begin
       If IterTok^.ID In S Then
         Begin
-          If NeedComma Then Write(OutFile, ', ');
+          If NeedComma Then
+          begin
+            Writeln(OutFile, ',');
+            WriteIndent;
+            Write(OutFile, '  ');
+          end;
           Write(OutFile, IterTok^.Name);
           NeedComma := True;
         End;
@@ -1306,6 +1319,8 @@ End;
 Procedure GenerateFile(Const UnitName, FName: String);
 
 Var R: PRule;
+    Tok: PTokenDecl;
+    First: Boolean;
 Begin
   Assign(OutFile, FName);
   Rewrite(OutFile);
@@ -1405,8 +1420,20 @@ Begin
   WriteIndent;
   Writeln(OutFile, '    NewNode^.Kind := ' + CfgTokenKind + ';');
   WriteIndent;
-  Writeln(OutFile, '    if ' + CfgTokenKind +
-          ' in [tokIdent, tokNumber, tokString, tokCharConst] then begin');
+  Write(OutFile, '    if ' + CfgTokenKind + ' in [');
+  First := True;
+  Tok := FirstToken;
+  while Tok <> nil do
+  begin
+    if Tok^.HasVal then
+    begin
+      if not First then Write(OutFile, ', ');
+      Write(OutFile, Tok^.Name);
+      First := False;
+    end;
+    Tok := Tok^.Next;
+  end;
+  Writeln(OutFile, '] then begin');
   WriteIndent;
   Writeln(OutFile, '      New(NewNode^.Val); NewNode^.Val^ := ' + CfgTokenValue + ';');
   WriteIndent;
@@ -1647,5 +1674,4 @@ Begin
   GenerateFile(BaseName(ChangeFileExt(SrcName, '')), DstName);
   FreeMem(GrammarBuffer, Word(BufferLen) + 1);
 End.
-
 
