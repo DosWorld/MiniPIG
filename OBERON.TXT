@@ -1,0 +1,311 @@
+(* ************************************************************
+  Oberon-2 Grammar for MiniPIG
+  ************************************************************ *)
+
+(* --- Directives --- *)
+$uses           (* Lexer; *)
+
+$token_type     (* TTokenKind *)
+$token_kind     (* CurrToken *)
+$token_next     (* NextToken *)
+$token_value    (* CurrTokenVal *)
+$token_line     (* CurrLine *)
+$token_eof      (* tkEof *)
+
+(* --- Tokens --- *)
+
+(* Structure *)
+$token          tkModule
+$token          tkImport
+$token          tkBegin
+$token          tkEnd
+$token          tkConst
+$token          tkType
+$token          tkVar
+$token          tkProcedure
+$token          tkForward       (* ^ used in declarations *)
+$token          tkPtr           (* POINTER *)
+
+(* Statements *)
+$token          tkIf
+$token          tkThen
+$token          tkElse
+$token          tkElsif
+$token          tkCase
+$token          tkOf
+$token          tkWhile
+$token          tkDo
+$token          tkRepeat
+$token          tkUntil
+$token          tkFor
+$token          tkTo
+$token          tkBy
+$token          tkLoop
+$token          tkExit
+$token          tkReturn
+$token          tkWith
+
+(* Types & Logic *)
+$token          tkArray
+$token          tkRecord
+$token          tkIn
+$token          tkIs
+$token          tkNil
+$token          tkTrue
+$token          tkFalse
+$token          tkOr
+$token          tkDiv
+$token          tkMod
+
+(* Symbols *)
+$token          tkDot           (* . *)
+$token          tkComma         (* , *)
+$token          tkColon         (* : *)
+$token          tkSemiColon     (* ; *)
+$token          tkBar           (* | *)
+$token          tkLParen        (* ( *)
+$token          tkRParen        (* ) *)
+$token          tkLBrack        (* [ *)
+$token          tkRBrack        (* ] *)
+$token          tkLBrace        (* { *)
+$token          tkRBrace        (* } *)
+$token          tkArrow         (* ^ (dereference) *)
+$token          tkAssign        (* := *)
+$token          tkRange         (* .. *)
+
+(* Comparison *)
+$token          tkEq            (* = *)
+$token          tkNeq           (* # *)
+$token          tkLt            (* < *)
+$token          tkLte           (* <= *)
+$token          tkGt            (* > *)
+$token          tkGte           (* >= *)
+
+(* Math *)
+$token          tkPlus          (* + *)
+$token          tkMinus         (* - *)
+$token          tkMul           (* * *)
+$token          tkSlash         (* / *)
+$token          tkAnd           (* & *)
+$token          tkNot           (* ~ *)
+
+(* Values *)
+$token_with_value tkIdent       (* Identifier *)
+$token_with_value tkInteger     (* Integer *)
+$token_with_value tkReal        (* Real *)
+$token_with_value tkString      (* String *)
+$token_with_value tkChar        (* Char *)
+
+(* ************************************************************
+   Grammar Rules
+   ************************************************************ *)
+
+Module ::= 
+    tkModule tkIdent tkSemiColon
+    [ ImportList ]
+    DeclarationSequence
+    [ tkBegin StatementSequence ]
+    tkEnd tkIdent tkDot
+    ;
+
+ImportList ::=
+    tkImport Import { tkComma Import } tkSemiColon
+    ;
+
+Import ::=
+    tkIdent [ tkAssign tkIdent ]
+    ;
+
+(* --- Declarations --- *)
+
+DeclarationSequence ::=
+    [ tkConst { ConstDecl tkSemiColon } ]
+    [ tkType  { TypeDecl  tkSemiColon } ]
+    [ tkVar   { VarDecl   tkSemiColon } ]
+    { ProcDecl tkSemiColon }
+    ;
+
+ConstDecl ::=
+    IdentDef tkEq ConstExpression
+    ;
+
+TypeDecl ::=
+    IdentDef tkEq Type
+    ;
+
+VarDecl ::=
+    IdentList tkColon Type
+    ;
+
+(* Procedure Declaration *)
+(* Handles both forward (^ at start) and regular decls *)
+ProcDecl ::=
+    tkProcedure 
+    ( tkForward [ Receiver ] IdentDef [ FormalPars ]
+    | [ Receiver ] IdentDef [ FormalPars ] tkSemiColon [ ProcBody tkIdent ]
+    )
+    ;
+
+ProcBody ::=
+    DeclarationSequence [ tkBegin StatementSequence ] tkEnd
+    ;
+
+Receiver ::=
+    tkLParen [ tkVar ] tkIdent tkColon tkIdent tkRParen
+    ;
+
+FormalPars ::=
+    tkLParen [ FPSection { tkSemiColon FPSection } ] tkRParen [ tkColon QualIdent ]
+    ;
+
+FPSection ::=
+    [ tkVar ] tkIdent { tkComma tkIdent } tkColon Type
+    ;
+
+(* --- Types --- *)
+
+Type ::=
+    QualIdent
+    | tkArray [ ConstExpression { tkComma ConstExpression } ] tkOf Type
+    | tkRecord [ tkLParen QualIdent tkRParen ] FieldListSequence tkEnd
+    | tkPtr tkTo Type
+    | tkProcedure [ FormalPars ]
+    ;
+
+FieldListSequence ::=
+    FieldList { tkSemiColon FieldList }
+    ;
+
+FieldList ::=
+    [ IdentList tkColon Type ]
+    ;
+
+IdentList ::=
+    IdentDef { tkComma IdentDef }
+    ;
+
+(* IdentDef parses "Name" or "Name*" (export mark) *)
+(* Token definitions imply tkMul is separate *)
+IdentDef ::= tkIdent [ tkMul ]; 
+
+QualIdent ::=
+    tkIdent [ tkDot tkIdent ]
+    ;
+
+(* --- Statements --- *)
+
+StatementSequence ::=
+    Statement { tkSemiColon Statement }
+    ;
+
+Statement ::=
+    [
+      (* Assignment or Procedure Call *)
+      (* Unified to solve LL(1) conflict: Designator swallows (args) *)
+      Designator [ tkAssign Expression ]
+
+    | tkIf Expression tkThen StatementSequence
+      { tkElsif Expression tkThen StatementSequence }
+      [ tkElse StatementSequence ] tkEnd
+
+    | tkCase Expression tkOf Case { tkBar Case } [ tkElse StatementSequence ] tkEnd
+
+    | tkWhile Expression tkDo StatementSequence tkEnd
+
+    | tkRepeat StatementSequence tkUntil Expression
+
+    | tkFor tkIdent tkAssign Expression tkTo Expression [ tkBy ConstExpression ] 
+      tkDo StatementSequence tkEnd
+
+    | tkLoop StatementSequence tkEnd
+
+    | tkWith Guard tkDo StatementSequence { tkBar Guard tkDo StatementSequence } 
+      [ tkElse StatementSequence ] tkEnd
+
+    | tkExit
+    | tkReturn [ Expression ]
+    ]
+    ;
+
+Guard ::=
+    QualIdent tkColon QualIdent
+    ;
+
+Case ::=
+    [ CaseLabels { tkComma CaseLabels } tkColon StatementSequence ]
+    ;
+
+CaseLabels ::=
+    ConstExpression [ tkRange ConstExpression ]
+    ;
+
+(* --- Expressions & Designators --- *)
+
+(* 
+   Strict LL(1) Designator Logic:
+   In Oberon, "v(T)" is a type guard, "p(a)" is a call. 
+   Syntactically they both look like "Ident ( ExprList )".
+   We treat them uniformly here. 
+*)
+Designator ::=
+    tkIdent { Selector }
+    ;
+
+Selector ::=
+      tkDot tkIdent
+    | tkLBrack ExpressionList tkRBrack
+    | tkArrow
+    | tkLParen ExpressionList tkRParen  (* Covers both TypeGuard(T) and Call(Args) *)
+    ;
+
+ConstExpression ::= Expression ;
+
+Expression ::=
+    SimpleExpression [ Relation SimpleExpression ]
+    ;
+
+Relation ::=
+    tkEq | tkNeq | tkLt | tkLte | tkGt | tkGte | tkIn | tkIs
+    ;
+
+SimpleExpression ::=
+    [ tkPlus | tkMinus ] Term { AddOp Term }
+    ;
+
+AddOp ::=
+    tkPlus | tkMinus | tkOr
+    ;
+
+Term ::=
+    Factor { MulOp Factor }
+    ;
+
+MulOp ::=
+    tkMul | tkSlash | tkDiv | tkMod | tkAnd
+    ;
+
+Factor ::=
+    tkInteger
+    | tkReal
+    | tkString
+    | tkChar
+    | tkNil
+    | tkTrue
+    | tkFalse
+    | Set
+    | Designator (* Note: Params/Guards are inside Designator *)
+    | tkLParen Expression tkRParen
+    | tkNot Factor
+    ;
+
+Set ::=
+    tkLBrace [ Element { tkComma Element } ] tkRBrace
+    ;
+
+Element ::=
+    Expression [ tkRange Expression ]
+    ;
+
+ExpressionList ::=
+    Expression { tkComma Expression }
+    ;

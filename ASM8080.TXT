@@ -1,0 +1,316 @@
+(* ************************************************************
+  Intel 8080 Assembler Grammar for MiniPIG
+  ************************************************************ *)
+
+(* --- Configuration --- *)
+$unit_start     (* unit Asm8080Parser; *)
+$uses           (* Lexer; *)
+
+$token_type     (* TTokenKind *)
+$token_kind     (* CurrToken *)
+$token_next     (* NextToken *)
+$token_value    (* CurrTokenVal *)
+$token_line     (* CurrLine *)
+$token_eof      (* tkEof *)
+
+(* --- Tokens --- *)
+
+(* Structural *)
+$token tkEOL        (* End Of Line (CR/LF) *)
+
+(* Registers *)
+$token tkRegA
+$token tkRegB
+$token tkRegC
+$token tkRegD
+$token tkRegE
+$token tkRegH
+$token tkRegL
+$token tkRegM
+$token tkSP
+$token tkPSW
+
+(* Instructions: Data Transfer *)
+$token tkMOV
+$token tkMVI
+$token tkLXI
+$token tkLDA
+$token tkSTA
+$token tkLHLD
+$token tkSHLD
+$token tkLDAX
+$token tkSTAX
+$token tkXCHG
+
+(* Instructions: Arithmetic *)
+$token tkADD
+$token tkADI
+$token tkADC
+$token tkACI
+$token tkSUB
+$token tkSUI
+$token tkSBB
+$token tkSBI
+$token tkINR
+$token tkDCR
+$token tkINX
+$token tkDCX
+$token tkDAD
+$token tkDAA
+
+(* Instructions: Logical *)
+$token tkANA
+$token tkANI
+$token tkXRA
+$token tkXRI
+$token tkORA
+$token tkORI
+$token tkCMP
+$token tkCPI
+$token tkRLC
+$token tkRRC
+$token tkRAL
+$token tkRAR
+$token tkCMA
+$token tkCMC
+$token tkSTC
+
+(* Instructions: Branch *)
+$token tkJMP
+$token tkJCC    (* JNZ, JZ, JNC, JC, JPO, JPE, JP, JM *)
+$token tkCALL
+$token tkCCC    (* CNZ, CZ, CNC, CC, CPO, CPE, CP, CM *)
+$token tkRET
+$token tkRCC    (* RNZ, RZ, RNC, RC, RPO, RPE, RP, RM *)
+$token tkRST
+$token tkPCHL
+
+(* Instructions: Stack & Control *)
+$token tkPUSH
+$token tkPOP
+$token tkXTHL
+$token tkSPHL
+$token tkIN
+$token tkOUT
+$token tkEI
+$token tkDI
+$token tkHLT
+$token tkNOP
+
+(* Directives *)
+$token tkORG
+$token tkEQU
+$token tkDB
+$token tkDW
+$token tkDS
+$token tkEND
+
+(* Operators *)
+$token tkComma      (* , *)
+$token tkColon      (* : *)
+$token tkLParen     (* ( *)
+$token tkRParen     (* ) *)
+
+(* Math & Logic Operators *)
+$token tkPlus       (* + *)
+$token tkMinus      (* - *)
+$token tkMul        (* * *)
+$token tkDiv        (* / *)
+$token tkMod        (* MOD *)
+$token tkShl        (* SHL *)
+$token tkShr        (* SHR *)
+$token tkOpAnd      (* AND (operator) vs tkANA (instruction) *)
+$token tkOpOr       (* OR  (operator) vs tkORA (instruction) *)
+$token tkOpXor      (* XOR (operator) vs tkXRA (instruction) *)
+$token tkOpNot      (* NOT (operator) *)
+
+$token_with_value tkIdent   (* Label or Name *)
+$token_with_value tkNumber  (* 123, 0FFH *)
+$token_with_value tkString  (* 'Text' *)
+$token_with_value tkChar    (* 'C' *)
+$token_with_value tkDollar  (* $ *)
+
+(* ************************************************************
+   Grammar Rules
+   ************************************************************ *)
+
+Program ::=
+    { Line }
+    ;
+
+(* A Line is strictly terminated by EOL *)
+Line ::=
+    ( tkEOL                         (* Empty line *)
+    | tkIdent IdentHandler          (* Starts with Label or EQU *)
+    | Operation tkEOL               (* Starts directly with Opcode *)
+    | tkEND tkEOL                   (* End of assembly *)
+    )
+    ;
+
+(* Logic when line starts with Ident: 
+   Could be "Label:" or "Name EQU Value" *)
+IdentHandler ::=
+      tkColon [ Operation ] tkEOL   (* Label definition *)
+    | tkEQU Expression tkEOL        (* Constant definition *)
+    ;
+
+(* Main Operation *)
+Operation ::=
+      Instruction
+    | Directive
+    ;
+
+(* --- Directives --- *)
+
+Directive ::=
+      tkORG Expression
+    | tkDB  DataList
+    | tkDW  ExpressionList
+    | tkDS  Expression
+    ;
+
+DataList ::=
+    DataItem { tkComma DataItem }
+    ;
+
+DataItem ::=
+    Expression | tkString
+    ;
+
+(* --- Instructions --- *)
+
+Instruction ::=
+      DataTransferGroup
+    | ArithmeticGroup
+    | LogicalGroup
+    | BranchGroup
+    | StackGroup
+    | ControlGroup
+    ;
+
+DataTransferGroup ::=
+      tkMOV MovTarget tkComma MovSource
+    | tkMVI MovTarget tkComma Expression
+    | tkLXI RegPair   tkComma Expression
+    | tkLDA Expression
+    | tkSTA Expression
+    | tkLHLD Expression
+    | tkSHLD Expression
+    | tkLDAX RegPairBD
+    | tkSTAX RegPairBD
+    | tkXCHG
+    ;
+
+ArithmeticGroup ::=
+      tkADD MovSource
+    | tkADC MovSource
+    | tkSUB MovSource
+    | tkSBB MovSource
+    | tkADI Expression
+    | tkACI Expression
+    | tkSUI Expression
+    | tkSBI Expression
+    | tkINR MovTarget
+    | tkDCR MovTarget
+    | tkINX RegPair
+    | tkDCX RegPair
+    | tkDAD RegPair
+    | tkDAA
+    ;
+
+LogicalGroup ::=
+      tkANA MovSource
+    | tkXRA MovSource
+    | tkORA MovSource
+    | tkCMP MovSource
+    | tkANI Expression
+    | tkXRI Expression
+    | tkORI Expression
+    | tkCPI Expression
+    | tkRLC | tkRRC | tkRAL | tkRAR
+    | tkCMA | tkCMC | tkSTC
+    ;
+
+BranchGroup ::=
+      tkJMP Expression
+    | tkJCC Expression
+    | tkCALL Expression
+    | tkCCC Expression
+    | tkRET
+    | tkRCC
+    | tkRST Expression
+    | tkPCHL
+    ;
+
+StackGroup ::=
+      tkPUSH RegPairAF
+    | tkPOP  RegPairAF
+    | tkXTHL
+    | tkSPHL
+    ;
+
+ControlGroup ::=
+      tkIN Expression
+    | tkOUT Expression
+    | tkEI | tkDI | tkHLT | tkNOP
+    ;
+
+(* --- Operands Helpers --- *)
+
+MovTarget ::= tkRegA | tkRegB | tkRegC | tkRegD | tkRegE | tkRegH | tkRegL | tkRegM ;
+MovSource ::= tkRegA | tkRegB | tkRegC | tkRegD | tkRegE | tkRegH | tkRegL | tkRegM ;
+
+RegPair   ::= tkRegB | tkRegD | tkRegH | tkSP ;
+RegPairBD ::= tkRegB | tkRegD ;
+RegPairAF ::= tkRegB | tkRegD | tkRegH | tkPSW ;
+
+(* --- Full Expressions Logic --- *)
+
+ExpressionList ::=
+    Expression { tkComma Expression }
+    ;
+
+(* Priority Level 1: Logical OR, XOR *)
+Expression ::=
+    SimpleExpr { LogOp SimpleExpr }
+    ;
+
+LogOp ::= tkOpOr | tkOpXor ;
+
+(* Priority Level 2: Logical AND *)
+SimpleExpr ::=
+    Term { tkOpAnd Term }
+    ;
+
+(* Priority Level 3: Addition, Subtraction *)
+Term ::=
+    ShiftExpr { AddOp ShiftExpr }
+    ;
+
+AddOp ::= tkPlus | tkMinus ;
+
+(* Priority Level 4: Shifts *)
+ShiftExpr ::=
+    Factor { ShiftOp Factor }
+    ;
+
+ShiftOp ::= tkShl | tkShr ;
+
+(* Priority Level 5: Multiplication, Division, Modulo *)
+Factor ::=
+    Atom { MulOp Atom }
+    ;
+
+MulOp ::= tkMul | tkDiv | tkMod ;
+
+(* Priority Level 6: Unary Operators & Primitives *)
+Atom ::=
+      tkNumber
+    | tkChar
+    | tkDollar
+    | tkIdent
+    | tkLParen Expression tkRParen
+    | tkOpNot Atom
+    | tkPlus Atom
+    | tkMinus Atom
+    ;
