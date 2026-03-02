@@ -1,5 +1,10 @@
 # MiniPIG 🐷
 
+![Platform](https://img.shields.io/badge/platform-DOS%20(16--bit)-orange.svg)
+![Language](https://img.shields.io/badge/Turbo-Pascal-blue.svg)
+![Tool](https://img.shields.io/badge/Compiler-Construction-green.svg)
+![AI Assisted](https://img.shields.io/badge/AI-Assisted-purple.svg)
+
 **Strict LL(1) Recursive Descent Parser Generator for Turbo Pascal**
 
 MiniPIG is a robust, single‑file parser generator specifically designed for the Turbo Pascal 7.0 environment. It reads a grammar file defined in an ISO EBNF‑style notation and compiles it into a standalone, high‑performance Pascal unit (`.PAS`).
