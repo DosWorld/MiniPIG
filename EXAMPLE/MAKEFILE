@@ -7,5 +7,5 @@ clean:
         del *.bak
         del *.tpu
         del minic.exe
-        del minic.tpu
+        del gminic.tpu
 

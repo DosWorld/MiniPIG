@@ -19,8 +19,6 @@ begin
 
   InitLexer(SourceFile);
   
-{  NextToken;}
-
   InitParser;
 
   if parse_Program then
