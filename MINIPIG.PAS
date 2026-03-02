@@ -3,8 +3,8 @@
   Copyright (c) 2026 by DosWorld, GNU GPLv3 License
   https://github.com/DosWorld/
   ****************************************************************** }
-{$M 64000,128000,650000}
-{$I+,S-,X+,R-,O-,G-}
+{$M 65000,256000,650000}
+{$I+,S-,X+,R-,O-,L-,G-}
 Program MiniPIG;
 
 Const 
@@ -24,7 +24,7 @@ Type
   PRule      = ^TRule;
 
   TQuant    = (qNone, qStar, qPlus, qQMark);
-  TElemKind = (ekNonterm, ekGroup, ekEmpty, ekPredicate, ekToken);
+  TElemKind = (ekNonterm, ekGroup, ekPredicate, ekToken);
 
   TTokenSet = set Of 0..MAX_TOKENS;
 
@@ -56,6 +56,7 @@ Type
   End;
 
   TAlt = Record
+    InitAction: TAction;
     FirstElem: PElement;
     Action: TAction;
     Next: PAlt;
@@ -342,24 +343,7 @@ Begin
   El^.Action := '';
   SkipWS;
   C := Peek;
-  If (C = '<') And (PeekNext = '?') Then
-    Begin
-      NextCh;
-      NextCh;
-      Start := Cursor;
-      While (Cursor <= BufferLen) Do
-        Begin
-          If (Peek = '?') And (PeekNext = '>') Then Break;
-          NextCh;
-        End;
-      El^.Action := GetTokenStr(Start);
-      NextCh;
-      NextCh;
-      El^.Kind := ekEmpty;
-      ParseElement := El;
-      Exit;
-    End
-  Else If (C = '?') And (PeekNext = '(') Then
+  If (C = '?') And (PeekNext = '(') Then
          Begin
            NextCh;
            NextCh;
@@ -438,12 +422,15 @@ Begin
   ParseElement := El;
 End;
 
-Function ParseSequence: PElement;
+Function ParseSequence(Var SeqAction: TAction): PElement;
 
 Var Head, Curr, NewEl: PElement;
 Begin
   Head := Nil;
   Curr := Nil;
+  SeqAction := '';
+  SkipWS;
+  If (Peek = '<') And (PeekNext = '?') Then SeqAction := ReadAction;
   While Cursor <= BufferLen Do
     Begin
       SkipWS;
@@ -472,7 +459,7 @@ Begin
     Begin
       New(NewAlt);
       NewAlt^.Next := Nil;
-      NewAlt^.FirstElem := ParseSequence;
+      NewAlt^.FirstElem := ParseSequence(NewAlt^.InitAction);
       NewAlt^.Action := ReadAction;
       NewAlt^.IsNullable := False;
       NewAlt^.FirstSet := [];
@@ -674,15 +661,76 @@ Begin
   CurrentProcessingRule := '';
 End;
 
+Procedure ComputeNode(FirstAlt: PAlt; Var NodeNullable: Boolean;
+Var NodeFirst: TTokenSet; BaseNullable: Boolean; Var Changed: Boolean);
+
+Var 
+  Alt: PAlt;
+  El: PElement;
+  NewNull: Boolean;
+  NewFirst: TTokenSet;
+Begin
+  NewNull := BaseNullable;
+  NewFirst := [];
+  Alt := FirstAlt;
+  While Alt <> Nil Do
+    Begin
+      Alt^.IsNullable := True;
+      Alt^.FirstSet := [];
+      El := Alt^.FirstElem;
+      While El <> Nil Do
+        Begin
+          Case El^.Kind Of 
+            ekToken:
+                     Begin
+                       Alt^.IsNullable := False;
+                       Alt^.FirstSet := Alt^.FirstSet + [El^.TokenID];
+                       Break;
+                     End;
+            ekNonterm:
+                       Begin
+                         Alt^.FirstSet := Alt^.FirstSet + El^.RulePtr^.FirstSet;
+                         If Not El^.RulePtr^.IsNullable Then
+                           Begin
+                             Alt^.IsNullable := False;
+                             Break;
+                           End;
+                       End;
+            ekGroup:
+                     Begin
+                       Alt^.FirstSet := Alt^.FirstSet + El^.Group^.FirstSet;
+                       If Not El^.Group^.IsNullable Then
+                         Begin
+                           Alt^.IsNullable := False;
+                           Break;
+                         End;
+                     End;
+            ekPredicate: ;
+          End;
+          El := El^.Next;
+        End;
+      If Alt^.IsNullable Then NewNull := True;
+      NewFirst := NewFirst + Alt^.FirstSet;
+      Alt := Alt^.Next;
+    End;
+
+  If NodeNullable <> NewNull Then
+    Begin
+      NodeNullable := NewNull;
+      Changed := True;
+    End;
+  If NodeFirst <> NewFirst Then
+    Begin
+      NodeFirst := NewFirst;
+      Changed := True;
+    End;
+End;
+
 Procedure ComputeAnalysis;
 
 Var Changed: Boolean;
   R: PRule;
   G: PGroup;
-  Alt: PAlt;
-  El: PElement;
-  NewNull: Boolean;
-  NewFirst: TTokenSet;
 Begin
   Repeat
     Changed := False;
@@ -690,60 +738,7 @@ Begin
     G := FirstGroup;
     While G <> Nil Do
       Begin
-        NewNull := (G^.Quant In [qStar, qQMark]);
-        NewFirst := [];
-        Alt := G^.FirstAlt;
-        While Alt <> Nil Do
-          Begin
-            Alt^.IsNullable := True;
-            Alt^.FirstSet := [];
-            El := Alt^.FirstElem;
-            While El <> Nil Do
-              Begin
-                Case El^.Kind Of 
-                  ekToken:
-                           Begin
-                             Alt^.IsNullable := False;
-                             Alt^.FirstSet := Alt^.FirstSet + [El^.TokenID];
-                             Break;
-                           End;
-                  ekNonterm:
-                             Begin
-                               Alt^.FirstSet := Alt^.FirstSet + El^.RulePtr^.FirstSet;
-                               If Not El^.RulePtr^.IsNullable Then
-                                 Begin
-                                   Alt^.IsNullable := False;
-                                   Break;
-                                 End;
-                             End;
-                  ekGroup:
-                           Begin
-                             Alt^.FirstSet := Alt^.FirstSet + El^.Group^.FirstSet;
-                               If Not El^.Group^.IsNullable Then
-                                 Begin
-                                   Alt^.IsNullable := False;
-                                   Break;
-                                 End;
-                             End;
-                  ekPredicate, ekEmpty: ;
-                End;
-                El := El^.Next;
-              End;
-            If Alt^.IsNullable Then NewNull := True;
-            NewFirst := NewFirst + Alt^.FirstSet;
-            Alt := Alt^.Next;
-          End;
-
-        If G^.IsNullable <> NewNull Then
-          Begin
-            G^.IsNullable := NewNull;
-            Changed := True;
-          End;
-        If G^.FirstSet <> NewFirst Then
-          Begin
-            G^.FirstSet := NewFirst;
-            Changed := True;
-          End;
+        ComputeNode(G^.FirstAlt, G^.IsNullable, G^.FirstSet, (G^.Quant In [qStar, qQMark]), Changed);
         G := G^.Next;
       End;
 
@@ -751,60 +746,7 @@ Begin
     While R <> Nil Do
       Begin
         CurrentProcessingRule := R^.Name;
-        NewNull := False;
-        NewFirst := [];
-        Alt := R^.FirstAlt;
-        While Alt <> Nil Do
-          Begin
-            Alt^.IsNullable := True;
-            Alt^.FirstSet := [];
-            El := Alt^.FirstElem;
-            While El <> Nil Do
-              Begin
-                Case El^.Kind Of 
-                  ekToken:
-                           Begin
-                             Alt^.IsNullable := False;
-                             Alt^.FirstSet := Alt^.FirstSet + [El^.TokenID];
-                             Break;
-                           End;
-                  ekNonterm:
-                             Begin
-                               Alt^.FirstSet := Alt^.FirstSet + El^.RulePtr^.FirstSet;
-                               If Not El^.RulePtr^.IsNullable Then
-                                 Begin
-                                   Alt^.IsNullable := False;
-                                   Break;
-                                 End;
-                             End;
-                  ekGroup:
-                           Begin
-                             Alt^.FirstSet := Alt^.FirstSet + El^.Group^.FirstSet;
-                               If Not El^.Group^.IsNullable Then
-                                 Begin
-                                   Alt^.IsNullable := False;
-                                   Break;
-                                 End;
-                             End;
-                  ekPredicate, ekEmpty: ;
-                End;
-                El := El^.Next;
-              End;
-            If Alt^.IsNullable Then NewNull := True;
-            NewFirst := NewFirst + Alt^.FirstSet;
-            Alt := Alt^.Next;
-          End;
-
-        If R^.IsNullable <> NewNull Then
-          Begin
-            R^.IsNullable := NewNull;
-            Changed := True;
-          End;
-        If R^.FirstSet <> NewFirst Then
-          Begin
-            R^.FirstSet := NewFirst;
-            Changed := True;
-          End;
+        ComputeNode(R^.FirstAlt, R^.IsNullable, R^.FirstSet, False, Changed);
         R := R^.Next;
       End;
   Until Not Changed;
@@ -1135,6 +1077,11 @@ Begin
             End;
           Writeln(OutFile, ': begin');
           Indent;
+          If Alt^.InitAction <> '' Then
+            Begin
+              WriteIndent;
+              Writeln(OutFile, Trim(Alt^.InitAction) + ';');
+            End;
           GenSequence(Alt^.FirstElem, Depth, FollowContext);
           If Alt^.Action <> '' Then
             Begin
