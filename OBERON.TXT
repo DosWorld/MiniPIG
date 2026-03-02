@@ -2,7 +2,6 @@
   Oberon-2 Grammar for MiniPIG
   ************************************************************ *)
 
-(* --- Directives --- *)
 $uses           (* Lexer; *)
 
 $token_type     (* TTokenKind *)

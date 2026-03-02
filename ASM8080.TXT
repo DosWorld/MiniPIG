@@ -2,8 +2,6 @@
   Intel 8080 Assembler Grammar for MiniPIG
   ************************************************************ *)
 
-(* --- Configuration --- *)
-$unit_start     (* unit Asm8080Parser; *)
 $uses           (* Lexer; *)
 
 $token_type     (* TTokenKind *)
