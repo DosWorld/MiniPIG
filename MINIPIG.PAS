@@ -534,14 +534,49 @@ Begin
   CurrentProcessingRule := '';
 End;
 
-Function readToEol(Var Start: LongInt): string;
-Begin
+function RemoveComments(const S: string): string;
+var
+  i, Len: Integer;
+  InComment: Boolean;
+  Res: string;
+begin
+  Res := '';
+  i := 1;
+  Len := Length(S);
+  InComment := False;
+  while i <= Len do
+  begin
+    if not InComment and (i < Len) and (S[i] = '(') and (S[i+1] = '*') then
+    begin
+      InComment := True;
+      Inc(i, 2);
+    end
+    else if InComment and (i < Len) and (S[i] = '*') and (S[i+1] = ')') then
+    begin
+      InComment := False;
+      Inc(i, 2);
+    end
+    else if not InComment then
+    begin
+      Res := Res + S[i];
+      Inc(i);
+    end
+    else
+      Inc(i);
+  end;
+  if InComment then
+    Warning('Unclosed comment in directive');
+  RemoveComments := Res;
+end;
+
+function readToEol(var Start: LongInt): string;
+begin
   SkipWS;
   Start := Cursor;
-  While (Cursor <= BufferLen) And (Peek <> #10) Do
+  while (Cursor <= BufferLen) and (Peek <> #10) do
     NextCh;
-  readToEol := trim(GetTokenStr(Start));
-End;
+  readToEol := Trim(RemoveComments(GetTokenStr(Start)));
+end;
 
 Procedure ParseGrammar;
 
