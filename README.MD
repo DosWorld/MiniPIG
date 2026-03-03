@@ -647,4 +647,5 @@ Additionally, the unit exports the token stream variables `MiniPigHead`, `MiniPi
 ## License
 
 MiniPIG is released under the **GNU General Public License v3 (GPLv3)**.
-(c) 2026 DosWorld.
+
+Copyright (c) 2026 DosWorld.
