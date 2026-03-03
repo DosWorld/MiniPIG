@@ -612,7 +612,7 @@ A: Yes, any Pascal function that returns a Boolean can be called, as long as it 
 A: Check that the token is declared with `$token_with_value`. If it’s declared with `$token`, no `Val` field is allocated and `MiniPigGetVal` will access a nil pointer.
 
 **Q: How can I implement error recovery?**  
-A: MiniPIG does not provide automatic error recovery. However, you can add your own recovery logic by wrapping rule calls with `try..except` or by checking parser state and manually advancing the cursor using `MiniPigCursor`.
+A: MiniPIG does not provide automatic error recovery. However, you can add your own recovery logic by checking parser state and manually advancing the cursor using `MiniPigCursor`.
 
 **Q: What is the `SaveStack` array used for?**  
 A: Predicates `?( ... )` use `SaveStack` to remember the cursor position before evaluating the condition. If the predicate fails, the parser restores the cursor and tries another alternative.
